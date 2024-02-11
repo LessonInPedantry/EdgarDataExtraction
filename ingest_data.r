@@ -168,16 +168,66 @@ sub_table[month(period) %in% 4:6, Quarter_Year := paste0("Q2_",as.character(year
 sub_table[month(period) %in% 7:9, Quarter_Year := paste0("Q3_",as.character(year(period)))]
 sub_table[month(period) %in% 10:12, Quarter_Year := paste0("Q4_",as.character(year(period)))]
 
+#Company_names <- strsplit(Condenced_num_table$Company_Quarter, "_")
+Company_names <- data.table(do.call(rbind, strsplit(Condenced_num_table$Company_Quarter, "_")))
+Condenced_num_table[, Company:= Company_names$V3]
+
+Condenced_num_table[, competitive_set := "Columbia Sportswear"]
+Condenced_num_table[Company %in% competitor_set, competitive_set := "Competitor"]
 
 
+
+counts_columbia <- data.table(names = names(Condenced_num_table), counts = lapply(names(Condenced_num_table), FUN = function(x){
+  Condenced_num_table[!is.na(get(x)) & Company == "COLUMBIA SPORTSWEAR CO",.N]  
+}))
+
+counts_columbia <- counts_columbia[counts > 0,]
+Condenced_num_table_subset <- Condenced_num_table[, .SD, .SDcols = counts_columbia$names]
+Condenced_num_table_subset$name <- NULL
+
+Time_Info <- data.table(do.call(rbind, strsplit(Condenced_num_table_subset$Quarter_Year, "_")))
+Condenced_num_table_subset[,Quarter := Time_Info$V1]
+Condenced_num_table_subset[,Year := Time_Info$V2]
+Condenced_num_table_subset <- Condenced_num_table_subset[!(Year == "2023" & Quarter == "Q2"),]
+Condenced_num_table_subset$Date_Coded <- NULL
+
+counts_competitors <- data.table(names = names(Condenced_num_table_subset), 
+                                 counts = lapply(names(Condenced_num_table_subset), 
+                                FUN = function(x){Condenced_num_table_subset[!is.na(get(x)),.N] }),
+                                counts_columbia = lapply(names(Condenced_num_table_subset), 
+                                                FUN = function(x){Condenced_num_table_subset[!is.na(get(x)) & Company == "COLUMBIA SPORTSWEAR CO",.N] }))
+
+test <- counts_competitors[counts_columbia > 10 | counts > 50]
 #Save the cleaned SEC data
-save(Condenced_num_table,num_table_wide,pre_table,sub_table,useful_tag_table, file = paste0(directory,"\\cleaned_data\\Cleaned_SEC_Data.RData"))
 
-write.csv("Condenced_num_table", file = paste0(directory,"\\cleaned_data\\Cleaned_Numeric_Data.csv"))
-write.csv("pre_table", file = paste0(directory,"\\cleaned_data\\pre_table.csv"))
-write.csv("sub_table", file = paste0(directory,"\\cleaned_data\\sub_table.csv"))
-write.csv("useful_tag_table", file = paste0(directory,"\\cleaned_data\\useful_tag_table.csv"))
 
+useful_tags <- names(Condenced_num_table_subset)
+#backup_tag <- tag_table
+useful_tag_table <- useful_tag_table[tag %in% useful_tags,]
+useful_tag_table <- useful_tag_table[order(tag,version)]
+
+missing_tags <- setdiff(useful_tags, useful_tag_table$tag)
+
+missing_tag_descriptions <- gsub("([A-Z])"," \\1", missing_tags)
+missing_tag_descriptions[64] <- "Quarter and Year Concatenated by _"
+missing_tag_descriptions[65] <- "Company Name and Quarter_Year concatenated by_"
+missing_tag_descriptions[66] <- "Company Name"
+missing_tag_descriptions[67] <- "Assignment of Companies into Columbia Sportswear and Competitors"
+missing_tag_descriptions[68] <- "Quarter of the Year this row of data was reported"
+missing_tag_descriptions[69] <- "Year this row of data was reported"
+missing_tag_descriptions[29] <- "Effective income tax rate reconciliation foreign deferred tax asset percent"
+missing_tag_descriptions[58] <- "Undistributed earnings foreign subsidiaries subject to transition tax"
+
+added_tags_table <- data.table(tag =  missing_tags, version = NA, custom = NA, abstract = NA, 
+                               datatype = NA, iord = NA, crdr = NA, tlabel = missing_tag_descriptions, doc = missing_tag_descriptions)
+useful_tag_table <- rbind(useful_tag_table,added_tags_table)
+
+save(Condenced_num_table_subset,num_table_wide,pre_table,sub_table,useful_tag_table, file = paste0(directory,"\\cleaned_data\\Cleaned_SEC_Data.RData"))
+
+write.csv(Condenced_num_table_subset, file = paste0(directory,"\\cleaned_data\\Cleaned_Numeric_Data.csv"))
+write.csv(pre_table, file = paste0(directory,"\\cleaned_data\\pre_table.csv"))
+write.csv(sub_table, file = paste0(directory,"\\cleaned_data\\sub_table.csv"))
+write.csv(useful_tag_table, file = paste0(directory,"\\cleaned_data\\useful_tag_table.csv"))
 
 #load(file = paste0(directory,"\\cleaned_data\\Cleaned_SEC_Data.RData"))
 
